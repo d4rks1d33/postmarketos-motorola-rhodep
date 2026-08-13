@@ -16,15 +16,33 @@ Each version: `linux-motorola-rhodep-vNN.apk` + `modules-vNN.tar.gz`
 
 ## Works
 Boot, UFS, display, touch, accelerated GPU, WiFi+BT, battery+charging,
-thermal, USB host/gadget+SSH, buttons, **vibrator**, **Docker**.
+thermal, USB host/gadget+SSH, buttons, **vibrator**, **Docker**,
+**mobile data (IPA)**, **audio**.
+
+## Kernel patches (shared with the Kali port)
+The kernel is the base both ports share. `aports/linux-motorola-rhodep/` carries
+the full patch set (7.2-rc5):
+- 0001-0024: device DTS + shared-driver fixes (display, GPU, WiFi/BT, USB/OTG,
+  charger, battery/JEITA, thermal, ramoops).
+- 0025-0026: **IPA / mobile data**. The fix was the IPA v4.5+ register layout
+  (the shared-SRAM window moved from +0x7000 to +0x10000 relative to the register
+  base); the old window made the first SRAM access reset the SoC with no log.
+  GSI firmware is loaded by the AP over TrustZone (`qcom,gsi-loader = "self"`,
+  PAS id 15, `ipa_fws.mdt` from the modem/NON-HLOS partition).
+- 0008: ramoops moved to `0xaf000000` (the address the Motorola bootloader
+  actually preserves across a warm reset; the generic `0xd0000000` node is
+  deleted on Motorola boards, which is why nothing was ever recovered from it).
+- 0032-0036: **audio** — APR services, LPASS macros + SoundWire + LPI pinctrl,
+  the Motorola rhodep sound card, and the LPASS codec v2.2. Needs
+  `CONFIG_SM_LPASSCC_6115=m` (enabled in the config).
+
+Kali-only extras (NetHunter tools, BTF-mismatch config, rtl8188eus, phone apps)
+are NOT here — those belong to the Kali userland, a different OS. Only the shared
+kernel work is mirrored into this pmOS port.
 
 ## Not yet / pending
-- Mobile data: the IPA node is present but `status=disabled` here (the SM6375
-  interconnect path is what the IPA needs; on this pmOS base it is left disabled).
-  Mobile data was subsequently solved on the Kali port — it turned out to be the
-  IPA register layout, not the interconnect — see the Kali NetHunter rhodep repo.
-- Internal WiFi monitor mode: not possible (WCN3990 firmware). See the kernel doc.
-- Audio, sensors, GPS, NFC, camera: pending.
+- Internal WiFi monitor mode: not possible (WCN3990 firmware). Use a USB adapter.
+- Sensors, GPS, NFC, camera: pending.
 
 ## src/
 `src-postmarketos-*-v45.tar.gz` = 26 patches + APKBUILD + config **without**
