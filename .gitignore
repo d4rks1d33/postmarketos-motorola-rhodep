@@ -1,0 +1,11 @@
+# Built artifacts (regenerate with pmbootstrap)
+*.deb
+*.img
+*.apk
+*.tar.gz
+*.tar.xz
+*.sqfs
+*.bmap
+
+# Vendor firmware blobs (NOT redistributable)
+**/firmware-motorola-rhodep/lib/firmware/**
