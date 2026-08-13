@@ -1,74 +1,78 @@
-# Port postmarketOS — motorola-rhodep (ESTABLE)
+# postmarketOS port — motorola-rhodep (STABLE)
 
-Alpine + Phosh sobre kernel mainline 7.2-rc5. Este es el port estable.
+Alpine + Phosh on mainline kernel 7.2-rc5. This is the stable port.
 
-## img/ — versiones (todas kernel 7.2.0-rc5)
+## img/ — versions (all kernel 7.2.0-rc5)
 
-| Ver | boot.img | Qué agrega | Notas |
+| Ver | boot.img | What it adds | Notes |
 |---|---|---|---|
-| v42 | boot-v42-IPA.img | primer intento IPA (nodo mal ubicado) | histórico |
-| v43 | boot-v43-DOCKER-IPA.img | Docker (parcial) + IPA | histórico |
-| v44 | (solo apk) | IPA con mem fix | **BOOTLOOP** — no usar (IPA cuelga sin interconnect) |
-| **v45** | boot-v45-DOCKER.img | **Docker OK + IPA disabled** | **ESTABLE ACTUAL** |
+| v42 | boot-v42-IPA.img | first IPA attempt (node misplaced) | historical |
+| v43 | boot-v43-DOCKER-IPA.img | Docker (partial) + IPA | historical |
+| v44 | (apk only) | IPA with mem fix | **BOOTLOOP** — do not use (IPA hangs without interconnect) |
+| **v45** | boot-v45-DOCKER.img | **Docker OK + IPA disabled** | **CURRENT STABLE** |
 
-Cada versión: `linux-motorola-rhodep-vNN.apk` + `modules-vNN.tar.gz`
-(+ `device-motorola-rhodep-vNN.apk` donde aplica).
+Each version: `linux-motorola-rhodep-vNN.apk` + `modules-vNN.tar.gz`
+(+ `device-motorola-rhodep-vNN.apk` where applicable).
 
-## Funciona
-Arranque, UFS, display, táctil, GPU acelerado, WiFi+BT, batería+carga,
-térmico, USB host/gadget+SSH, botones, **vibrador**, **Docker**.
+## Works
+Boot, UFS, display, touch, accelerated GPU, WiFi+BT, battery+charging,
+thermal, USB host/gadget+SSH, buttons, **vibrator**, **Docker**.
 
-## No / pendiente
-- Datos móviles: IPA presente pero `status=disabled` (falta driver interconnect
-  SM6375; activarlo cuelga). Ver doc técnico §7.6.
-- Monitor mode WiFi interno: inviable (firmware WCN3990). Ver §7.7.
-- Audio, sensores, GPS, NFC, cámara: pendientes.
+## Not yet / pending
+- Mobile data: the IPA node is present but `status=disabled` here (the SM6375
+  interconnect path is what the IPA needs; on this pmOS base it is left disabled).
+  Mobile data was subsequently solved on the Kali port — it turned out to be the
+  IPA register layout, not the interconnect — see the Kali NetHunter rhodep repo.
+- Internal WiFi monitor mode: not possible (WCN3990 firmware). See the kernel doc.
+- Audio, sensors, GPS, NFC, camera: pending.
 
 ## src/
-`src-postmarketos-*-v45.tar.gz` = 26 patches + APKBUILD + config **sin**
-features NetHunter. Esta es la línea base "limpia" para el MR a pmaports.
+`src-postmarketos-*-v45.tar.gz` = 26 patches + APKBUILD + config **without**
+the NetHunter features. This is the "clean" baseline for the pmaports MR. It is
+extracted under `aports/` in this repo so it can be browsed/edited directly.
 
-## Instalación (SIEMPRE por apk, NO fastboot flash boot a mano)
-Este device tiene `deviceinfo_flash_kernel_on_update="true"`: el DTB/boot que
-corre viene del **kernel-apk instalado en el rootfs** (`/boot/dtbs/...`), y
-boot-deploy reflashea `boot_a` al instalar el apk. Flashear boot.img a mano SOLO
-sirve para rescate y lo pisa el proximo `apk add`.
+## Installation (ALWAYS via apk, NOT `fastboot flash boot` by hand)
+This device has `deviceinfo_flash_kernel_on_update="true"`: the running DTB/boot
+comes from the **kernel apk installed in the rootfs** (`/boot/dtbs/...`), and
+boot-deploy reflashes `boot_a` when the apk is installed. Flashing a boot.img by
+hand is ONLY for rescue and gets overwritten by the next `apk add`.
 ```
-# desde la Mac (IP del telefono, por USB gadget 172.16.42.1 o WiFi):
+# from the host (phone IP, over USB gadget 172.16.42.1 or WiFi):
 scp linux-motorola-rhodep-vNN.apk modules-vNN.tar.gz user@172.16.42.1:/tmp/
-# en el telefono:
-sudo rm -rf /usr/lib/modules/7.2.0-rc5           # gotcha: borrar viejos (README-KERNEL §5)
+# on the phone:
+sudo rm -rf /usr/lib/modules/7.2.0-rc5           # gotcha: remove the old ones first
 sudo tar -xzf /tmp/modules-vNN.tar.gz -C /
 sudo depmod -a 7.2.0-rc5
-sudo apk add --allow-untrusted /tmp/linux-motorola-rhodep-vNN.apk   # reflashea boot solo
+sudo apk add --allow-untrusted /tmp/linux-motorola-rhodep-vNN.apk   # reflashes boot itself
 sudo reboot
-# verificar: 0 modulos vacios y 0 .ko.zst (ver README-KERNEL §4.4/§5)
+# verify: 0 empty modules and 0 .ko.zst
 ```
-Rescate por fastboot: `fastboot flash boot_a boot-v45-DOCKER.img` (arranca, pero
-para dejarlo consistente reinstalar el apk despues). Ver README-KERNEL §12.
+Rescue via fastboot: `fastboot flash boot_a boot-v45-DOCKER.img` (boots, but
+reinstall the apk afterwards to keep things consistent).
 
-## Cómo se compila (resumen; detalle en README-rhodep-KERNEL.md §4)
+## How to build (summary)
 ```
 cd ~/.local/var/pmbootstrap/cache_git/pmaports/device/testing/linux-motorola-rhodep
-# editar patches/config, luego SIEMPRE:
+# edit patches/config, then ALWAYS:
 pmbootstrap checksum linux-motorola-rhodep
 pmbootstrap build --force linux-motorola-rhodep
-# apk queda en ~/.local/var/pmbootstrap/packages/edge/aarch64/
-# armar boot.img (Image PLANO): cd /opt/postmarket/repo ; sh scripts/make-boot-from-apk.sh <base.img> <nuevo.img>
-# extraer modulos: ver README-KERNEL §4.4 (verificar 0 .ko.zst!)
+# apk lands in ~/.local/var/pmbootstrap/packages/edge/aarch64/
+# build boot.img (FLAT Image): sh scripts/make-boot-from-apk.sh <base.img> <new.img>
+# extract modules: verify 0 .ko.zst!
 ```
-Config y 26 patches: `src/src-postmarketos-*-v45.tar.gz` o directo en el pmaports.
-GOTCHAS criticos (README-KERNEL §5): NO `MODULE_COMPRESS` (cuelga arranque),
-Image PLANO no gz (bootloader Motorola resetea), no mezclar cambios config+logica.
+Config and 26 patches: `src/src-postmarketos-*-v45.tar.gz` (or under `aports/`).
+Critical gotchas: NO `MODULE_COMPRESS` (hangs boot), FLAT Image not gz (the
+Motorola bootloader resets on a self-decompressing image), do not mix config and
+logic changes in one step.
 
-## Diferencia con el kernel de Kali
-Kali usa el MISMO kernel + 1 cambio de config: `CONFIG_MODULE_ALLOW_BTF_MISMATCH=y`
-(+ ~58 simbolos NetHunter). Ese fix BTF es INOFENSIVO para pmOS -> se podria
-unificar el config y usar un solo kernel para ambos ports. Hoy pmOS v45 NO lo
-tiene; si se recompila pmOS, considerar agregarlo para converger.
+## Difference from the Kali kernel
+Kali uses the SAME kernel + one config change: `CONFIG_MODULE_ALLOW_BTF_MISMATCH=y`
+(+ ~58 NetHunter symbols). That BTF fix is HARMLESS for pmOS, so the config could
+be unified into a single kernel for both ports. pmOS v45 does not have it today;
+if pmOS is rebuilt, consider adding it to converge.
 
-## MR pmaports
-`postmarketOS/pmaports!9234`, fork `d4rks1d33/pmaports` rama `motorola-rhodep`.
-Commit unico `motorola-rhodep: new device`. Detalle en README-rhodep-KERNEL.md §11.
-El MR se basa en ESTE port (pmOS), NO en el de NetHunter. El `src/` de pmOS tiene
-la config SIN NetHunter (linea base limpia para el MR).
+## pmaports MR
+`postmarketOS/pmaports!9234`, fork `d4rks1d33/pmaports` branch `motorola-rhodep`,
+single commit `motorola-rhodep: new device`. The MR is based on THIS port (pmOS),
+NOT the NetHunter one. The pmOS `src/` has the config WITHOUT NetHunter (clean
+baseline for the MR).
