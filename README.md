@@ -21,33 +21,57 @@ thermal, USB host/gadget+SSH, buttons, **vibrator**, **Docker**,
 
 ## Kernel patches (shared with the Kali port)
 The kernel is the base both ports share. `aports/linux-motorola-rhodep/` carries
-the full patch set (7.2-rc5):
-- 0001-0024: device DTS + shared-driver fixes (display, GPU, WiFi/BT, USB/OTG,
+the full patch set (7.2-rc5): **108 patch files, 96 applied via `source=`** (the
+other 12 are diagnostics kept on purpose, not built). These are byte-identical
+to the Kali port's `kernel/patches/`; only the userland and a handful of config
+symbols differ (see below). By subsystem:
+
+- **0001-0024**: device DTS + shared-driver fixes (display, GPU, WiFi/BT, USB/OTG,
   charger, battery/JEITA, thermal, ramoops).
-- 0025-0026: **IPA / mobile data**. The fix was the IPA v4.5+ register layout
-  (the shared-SRAM window moved from +0x7000 to +0x10000 relative to the register
-  base); the old window made the first SRAM access reset the SoC with no log.
+- **0025-0028, 0042-0049, 0058-0088**: **IPA / mobile data + interconnect +
+  remoteproc/glink**. The core fix was the IPA v4.5+ register layout (the
+  shared-SRAM window moved from +0x7000 to +0x10000); later patches add the
+  SM6375 interconnect provider, NoC path voting, pd-mapper, the APSS watchdog and
+  the glink/remoteproc reliability fixes. Needs `CONFIG_INTERCONNECT_QCOM_SM6375`.
   GSI firmware is loaded by the AP over TrustZone (`qcom,gsi-loader = "self"`,
   PAS id 15, `ipa_fws.mdt` from the modem/NON-HLOS partition).
-- 0008: ramoops moved to `0xaf000000` (the address the Motorola bootloader
-  actually preserves across a warm reset; the generic `0xd0000000` node is
-  deleted on Motorola boards, which is why nothing was ever recovered from it).
-- 0032-0036: **audio** — APR services, LPASS macros + SoundWire + LPI pinctrl,
-  the Motorola rhodep sound card, and the LPASS codec v2.2. Needs
-  `CONFIG_SM_LPASSCC_6115=m` (enabled in the config).
+- **0032-0036, 0059, 0095**: **audio** — APR services, LPASS macros + SoundWire +
+  LPI pinctrl, the sound card, LPASS codec v2.2, the drvdata-before-clocks oops
+  fix, and the soundwire wake IRQ.
+- **0051-0057, 0089-0092**: **camera** — the FAN53870 camera PMIC
+  (`CONFIG_REGULATOR_FAN53870`), CAMSS + CCI, the S5KJN1 rear sensor, FastRPC, and
+  the flash-as-torch. (Groundwork; capture is not done yet.)
+- **0062-0065, 0093-0094, 0097-0098, 0108**: **display / GPU** — LP-mode
+  brightness, the 770/840 MHz GPU steps, selectable 48/60/90/120 Hz, and the DSI
+  lane-underflow modeset recovery.
+- **0096, 0099-0100, 0106-0109**: **battery / charger / regulator rails** —
+  discharge-vs-full, the charger interrupt, and the Sony→Motorola rail voltages.
+- **0101-0105, 0110-0113**: **NFC** — the s3fwrn5 (S3NRN4V) reader and the MIFARE
+  listen/eSE routing.
+- **0061, 0067-0068, 0049**: reliability — cpuidle, ramoops ECC/firmware regions,
+  the watchdog, and the removed-region size.
 
-Kali-only extras (NetHunter tools, BTF-mismatch config, rtl8188eus, phone apps)
-are NOT here — those belong to the Kali userland, a different OS. Only the shared
-kernel work is mirrored into this pmOS port.
+Only **three config symbols** are added on top of the pmOS base to enable the new
+hardware: `CONFIG_INTERCONNECT_QCOM_SM6375=y` (modem data),
+`CONFIG_REGULATOR_FAN53870=m` (camera PMIC) and `CONFIG_MODULE_ALLOW_BTF_MISMATCH=y`
+(lets mismatched/out-of-tree modules load). Everything else the pmOS base already
+enabled.
+
+**Kali-only extras stay out of this pmOS port**: the NetHunter config stack (USB
+Wi-Fi injection, SDR, BadUSB HID, CAN, NFS server, extended netfilter) and the
+Kali userland. This keeps pmOS a clean, pentest-free build with the same working
+hardware. Add `kernel/config/nethunter-config.fragment` from the Kali repo only
+if you want those features.
 
 ## Not yet / pending
 - Internal WiFi monitor mode: not possible (WCN3990 firmware). Use a USB adapter.
-- Sensors, GPS, NFC, camera: pending.
+- Camera capture (PMIC + pipeline groundwork done, no image yet), GPS.
+  Sensors and NFC now have kernel support via the patches above.
 
 ## src/
-`src-postmarketos-*-v45.tar.gz` = 26 patches + APKBUILD + config **without**
-the NetHunter features. This is the "clean" baseline for the pmaports MR. It is
-extracted under `aports/` in this repo so it can be browsed/edited directly.
+`src-postmarketos-*-v45.tar.gz` was the original 26-patch baseline. The live
+tree under `aports/` is now the full 108-file set and is what to build from;
+the tarball is only the historical starting point.
 
 ## Installation (ALWAYS via apk, NOT `fastboot flash boot` by hand)
 This device has `deviceinfo_flash_kernel_on_update="true"`: the running DTB/boot
@@ -78,16 +102,21 @@ pmbootstrap build --force linux-motorola-rhodep
 # build boot.img (FLAT Image): sh scripts/make-boot-from-apk.sh <base.img> <new.img>
 # extract modules: verify 0 .ko.zst!
 ```
-Config and 26 patches: `src/src-postmarketos-*-v45.tar.gz` (or under `aports/`).
+Config and the full 108-file patch set live under `aports/linux-motorola-rhodep/`.
 Critical gotchas: NO `MODULE_COMPRESS` (hangs boot), FLAT Image not gz (the
 Motorola bootloader resets on a self-decompressing image), do not mix config and
 logic changes in one step.
 
 ## Difference from the Kali kernel
-Kali uses the SAME kernel + one config change: `CONFIG_MODULE_ALLOW_BTF_MISMATCH=y`
-(+ ~58 NetHunter symbols). That BTF fix is HARMLESS for pmOS, so the config could
-be unified into a single kernel for both ports. pmOS v45 does not have it today;
-if pmOS is rebuilt, consider adding it to converge.
+Same kernel and the **same 108-file patch set** (byte-identical). The only
+difference is config: Kali carries ~43 active NetHunter pentest symbols (USB
+Wi-Fi injection, SDR, BadUSB HID, CAN, NFS server, extended netfilter) that this
+pmOS config deliberately omits. Both now share the three hardware-enabling
+symbols (`INTERCONNECT_QCOM_SM6375`, `REGULATOR_FAN53870`,
+`MODULE_ALLOW_BTF_MISMATCH`). So a pmOS build from this tree gets all the same
+working hardware as Kali — modem/data, audio, display/GPU, camera groundwork,
+NFC, sensors — without the pentest tooling. Verified: this tree builds clean with
+pmbootstrap.
 
 ## pmaports MR
 `postmarketOS/pmaports!9234`, fork `d4rks1d33/pmaports` branch `motorola-rhodep`,
